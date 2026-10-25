@@ -1,4 +1,11 @@
+import dotenv from "dotenv";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createApp } from "./app.js";
+
+dotenv.config({
+  path: resolve(fileURLToPath(new URL("../../../.env", import.meta.url)))
+});
 
 const port = Number(process.env.PORT ?? 3001);
 

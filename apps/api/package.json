@@ -5,12 +5,17 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "predev": "npm run build --workspace @threatlens/shared",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "test": "vitest run"
   },
   "dependencies": {
-    "express": "^5.1.0"
+    "@threatlens/shared": "0.1.0",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "openai": "^6.49.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/express": "^5.0.3",
@@ -19,6 +24,6 @@
     "supertest": "^7.1.1",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.12"
   }
 }

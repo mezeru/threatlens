@@ -7,6 +7,9 @@ export interface SecurityEvent {
   eventType: string;
   severity: SecurityEventSeverity;
   description: string;
+  userId?: string;
+  sourceIp?: string;
+  resourceId?: string;
   metadata?: Record<string, string | number | boolean | null>;
 }
 

@@ -1,0 +1,16 @@
+{
+  "name": "threatlens",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n api,web \"npm run dev --workspace @threatlens/api\" \"npm run dev --workspace @threatlens/web\"",
+    "test": "npm run test --workspaces --if-present",
+    "build": "npm run build --workspace @threatlens/shared && npm run build --workspace @threatlens/api && npm run build --workspace @threatlens/web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

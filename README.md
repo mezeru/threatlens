@@ -5,6 +5,10 @@ scaffold includes a React/Vite frontend, an Express API, a synthetic-data
 investigation agent, and shared TypeScript contracts. It intentionally has no
 database or connection to real security systems.
 
+For the architecture, agent lifecycle, event fixture, tool contracts, report
+validation, API details, and test coverage, see
+[the implementation guide](./docs/IMPLEMENTATION.md).
+
 ## Requirements
 
 - Node.js 20 or newer
@@ -17,7 +21,7 @@ From the repository root:
 ```sh
 npm install
 cp .env.example .env
-# Add your OpenAI API key to OPENAI_API_KEY in .env
+# Set OPENAI_API_KEY in .env, then run:
 npm run dev
 ```
 

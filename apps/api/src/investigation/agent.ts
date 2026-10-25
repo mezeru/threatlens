@@ -13,9 +13,10 @@ import {
   userQueryInputSchema
 } from "./tools.js";
 import {
-  InvestigationReportSchema,
+  createInvestigationReportSchema,
   type InvestigationReport
 } from "./report.js";
+import type { SyntheticSecurityEvent } from "./dataset.js";
 
 export const MAX_TOOL_CALLS = 6;
 export const MAX_MODEL_ITERATIONS = 4;
@@ -114,37 +115,61 @@ function parseToolArguments(value: string): unknown {
   }
 }
 
-function executeTool(name: string, rawArguments: string): string {
+interface ToolExecutionResult {
+  content: string;
+  events: SyntheticSecurityEvent[] | null;
+}
+
+function toolError(message: string): ToolExecutionResult {
+  return { content: JSON.stringify({ error: message }), events: null };
+}
+
+function toolSuccess(events: SyntheticSecurityEvent[]): ToolExecutionResult {
+  return { content: JSON.stringify(events), events };
+}
+
+function executeTool(name: string, rawArguments: string): ToolExecutionResult {
   const input = parseToolArguments(rawArguments);
   if (input === null) {
-    return JSON.stringify({ error: "Tool arguments must be valid JSON." });
+    return toolError("Tool arguments must be valid JSON.");
   }
 
   switch (name) {
     case "searchAuthEvents": {
       const parsed = authSearchInputSchema.safeParse(input);
       return parsed.success
-        ? JSON.stringify(searchAuthEvents(parsed.data))
-        : JSON.stringify({ error: "Invalid authentication search arguments." });
+        ? toolSuccess(searchAuthEvents(parsed.data))
+        : toolError("Invalid authentication search arguments.");
     }
     case "getUserTimeline": {
       const parsed = userQueryInputSchema.safeParse(input);
       return parsed.success
-        ? JSON.stringify(getUserTimeline(parsed.data))
-        : JSON.stringify({ error: "Invalid user timeline arguments." });
+        ? toolSuccess(getUserTimeline(parsed.data))
+        : toolError("Invalid user timeline arguments.");
     }
     case "getResourceAccessEvents": {
       const parsed = userQueryInputSchema.safeParse(input);
       return parsed.success
-        ? JSON.stringify(getResourceAccessEvents(parsed.data))
-        : JSON.stringify({ error: "Invalid resource search arguments." });
+        ? toolSuccess(getResourceAccessEvents(parsed.data))
+        : toolError("Invalid resource search arguments.");
     }
     default:
-      return JSON.stringify({ error: "Unknown investigation tool." });
+      return toolError("Unknown investigation tool.");
   }
 }
 
-function parseFinalReport(content: string | null): InvestigationReport {
+function parseFinalReport(
+  content: string | null,
+  retrievedEventIds: ReadonlySet<string>,
+  successfulEvidenceToolCallCount: number
+): InvestigationReport {
+  if (successfulEvidenceToolCallCount === 0) {
+    throw new InvestigationError(
+      "MALFORMED_MODEL_OUTPUT",
+      "The model must successfully gather evidence before returning a report."
+    );
+  }
+
   if (!content) {
     throw new InvestigationError(
       "MALFORMED_MODEL_OUTPUT",
@@ -162,7 +187,7 @@ function parseFinalReport(content: string | null): InvestigationReport {
     );
   }
 
-  const parsed = InvestigationReportSchema.safeParse(output);
+  const parsed = createInvestigationReportSchema(retrievedEventIds).safeParse(output);
   if (!parsed.success) {
     throw new InvestigationError(
       "MALFORMED_MODEL_OUTPUT",
@@ -239,6 +264,8 @@ export async function investigate(
     { role: "user", content: parsedQuestion.data }
   ];
   let toolCallCount = 0;
+  let successfulEvidenceToolCallCount = 0;
+  const retrievedEventIds = new Set<string>();
 
   for (let iteration = 0; iteration < MAX_MODEL_ITERATIONS; iteration += 1) {
     let response: ModelResponse;
@@ -252,7 +279,11 @@ export async function investigate(
     }
 
     if (response.toolCalls.length === 0) {
-      return parseFinalReport(response.content);
+      return parseFinalReport(
+        response.content,
+        retrievedEventIds,
+        successfulEvidenceToolCallCount
+      );
     }
 
     const assistantMessage: ChatCompletionMessageParam = {
@@ -274,10 +305,15 @@ export async function investigate(
         );
       }
       toolCallCount += 1;
+      const result = executeTool(call.name, call.arguments);
+      if (result.events !== null) {
+        successfulEvidenceToolCallCount += 1;
+        result.events.forEach((event) => retrievedEventIds.add(event.id));
+      }
       messages.push({
         role: "tool",
         tool_call_id: call.id,
-        content: executeTool(call.name, call.arguments)
+        content: result.content
       });
     }
   }

@@ -1,7 +1,6 @@
 import { z } from "zod";
-import { syntheticEvents } from "./dataset.js";
 
-export const InvestigationReportSchema = z
+const reportSchema = z
   .object({
     summary: z.string().trim().min(1).max(2000),
     severity: z.enum(["low", "medium", "high", "critical"]),
@@ -22,19 +21,22 @@ export const InvestigationReportSchema = z
       .array(z.string().trim().min(1).max(1000))
       .min(1)
       .max(10)
-  })
-  .strict()
-  .superRefine((report, context) => {
-    const knownEventIds = new Set(syntheticEvents.map((event) => event.id));
+  }).strict();
+
+export function createInvestigationReportSchema(
+  retrievedEventIds: ReadonlySet<string>
+) {
+  return reportSchema.superRefine((report, context) => {
     report.evidence.forEach((evidence, index) => {
-      if (!knownEventIds.has(evidence.eventId)) {
+      if (!retrievedEventIds.has(evidence.eventId)) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["evidence", index, "eventId"],
-          message: "Evidence must reference a known synthetic event."
+          message: "Evidence must reference an event retrieved in this investigation."
         });
       }
     });
   });
+}
 
-export type InvestigationReport = z.infer<typeof InvestigationReportSchema>;
+export type InvestigationReport = z.infer<typeof reportSchema>;

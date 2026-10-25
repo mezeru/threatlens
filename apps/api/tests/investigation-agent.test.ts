@@ -92,6 +92,39 @@ describe("investigation agent", () => {
     });
   });
 
+  it("rejects an immediate report before any evidence is retrieved", async () => {
+    const model = modelReturning({
+      content: JSON.stringify(validReport),
+      toolCalls: []
+    });
+
+    await expect(investigate("Investigate usr-alex.", model)).rejects.toMatchObject({
+      code: "MALFORMED_MODEL_OUTPUT",
+      message: "The model must successfully gather evidence before returning a report."
+    });
+    expect(model.complete).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects known event IDs that were not retrieved in this investigation", async () => {
+    const model = modelReturning(
+      {
+        content: null,
+        toolCalls: [
+          {
+            id: "call-jordan",
+            name: "getUserTimeline",
+            arguments: JSON.stringify({ userId: "usr-jordan" })
+          }
+        ]
+      },
+      { content: JSON.stringify(validReport), toolCalls: [] }
+    );
+
+    await expect(investigate("Investigate usr-jordan.", model)).rejects.toMatchObject({
+      code: "MALFORMED_MODEL_OUTPUT"
+    });
+  });
+
   it("returns malformed tool arguments to the model as a safe tool error", async () => {
     const model = modelReturning(
       {
@@ -101,6 +134,16 @@ describe("investigation agent", () => {
             id: "call-invalid",
             name: "getUserTimeline",
             arguments: JSON.stringify({ userId: "" })
+          }
+        ]
+      },
+      {
+        content: null,
+        toolCalls: [
+          {
+            id: "call-valid",
+            name: "getUserTimeline",
+            arguments: JSON.stringify({ userId: "usr-alex" })
           }
         ]
       },
@@ -117,6 +160,13 @@ describe("investigation agent", () => {
         content: JSON.stringify({
           error: "Invalid user timeline arguments."
         })
+      })
+    );
+    expect(model.complete.mock.calls[2]?.[0]).toContainEqual(
+      expect.objectContaining({
+        role: "tool",
+        tool_call_id: "call-valid",
+        content: expect.stringContaining("EVT-1005")
       })
     );
   });
